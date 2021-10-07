@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - loader - ttf</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link type="text/css" rel="stylesheet" href="main.css">
+	</head>
+	<body>
+		<div id="info">
+			<a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> - TTFLoader using opentype by gero3
+			<br/>type to enter new text, drag to spin the text
+		</div>
+
+		<script src="./opentype.min.js"></script>
+		<script src="./three.min.js"></script>
+		<script src="./TTFLoader.js"></script>
+		<script src="scoreoutputer.min.js"></script>
+
+		<script>
+			// 建構子 ScoreOutputer 接受一個字串，該字串為 csv 的檔案名稱
+			// 以下面範例，檔名就為 "109598105(總分: 6).csv"
+			var so = new ScoreOutputer("109598105");
+			so.installCSS(function(){
+				// 安裝 bootstrap 的 css，如果在 html 上方引用 bootstrap 5.1.1 的話就不用使用 installCSS ，注意一定要 bootstrap css 5.1.1 版
+				// installCSS 接收一個 callback 當作參數，作為成功安裝 bootstrap css 的回呼函式
+			
+				//加入項目，分數，完成狀況
+				//第一個參數為 項目名稱
+				//第2個參數為 項目分數
+				//第3個參數為 完成狀況，有完成 true/未完成 false
+				//有幾個項目就呼叫幾個 addChild
+				//addChild 要比 renderModal 先呼叫
+				so.addChild("創建場景", 2, false);
+				so.addChild("讀取字型檔", 2, false);
+				so.addChild("將地支以圓圈排列", 2, false);
+				so.addChild("滑鼠點擊 12 地支分別跳轉網頁", 1, false);
+				so.addChild("顯示 高等計算機圖形作業 ", 1, false);
+				so.addChild("時鐘效果", 1, false);
+				so.addChild("任何 ply 格式模型", 1, false);
+
+				//產生自評表，參數如下所示
+				so.renderModal(
+					//1. 自評表插入位置 (預設 document.body)
+					document.body,
+					//2. 自評表背景 (預設紅色)
+					'rgba(100,45,58,1)', 
+					//3. 自評表文字顏色 (預設白色)
+					'white', 
+					//4. 自評表文字大小 (預設 14pt)
+					'15pt', 
+					//5. 自評表 checkbox 文字大小 (預設多少忘了)
+					'15px', 
+					//6. 自評表標題 (預設 "自我評分表")
+					dialogTitle='自我評分表 (助教測試用)'
+				);
+				
+				//設定下載按鈕 <-- 一定要呼叫這個函數，不然沒有下載功能
+				so.installDownloadBtn();
+				
+				//產生 "開啟自評表按鈕"
+				so.renderBtn(
+					//自評表按鈕插入位置
+					document.body,
+					//自評表按鈕文字
+					"開啟自評表"
+				);
+			});
+		</script>
+
+		<script type="module">
+			import {PLYLoader} from "./PLYLoader.js";
+
+			console.log(PLYLoader);
+			let container;
+			let camera, cameraTarget, scene, renderer, ply_camera;
+			let group, textMesh1, textMesh2, textGeo, material,timetextMesh,testgroup, subgroup;
+			let firstLetter = true;
+			let ply_animate_group, ply_obj_group;
+			let ply_loader, ply_parent;
+			let geometry, cubeA, clock_animation_group,angle, r,x,y;
+			let text2 = "高等計算機圖學作業";
+			let text = ['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
+			let circleArray = [];
+			const height = 20,
+				size = 30,
+				hover = 30,
+				curveSegments = 4,
+				bevelThickness = 2,
+				bevelSize = 1.5;
+
+			let font = null;
+			const mirror = false;
+
+			let targetRotation = 0;
+			let targetRotationOnPointerDown = 0;
+
+			let pointerX = 0;
+			let pointerXOnPointerDown = 0;
+
+			let windowHalfX = window.innerWidth / 2;
+
+			var settings = {
+				minutesNumber: 60,
+				radius: 100,
+				depthFace: 20,
+				lineWidthHandHour: 5,
+				lineWidthHandMinute: 5,
+				lineWidthHandSecond: 1,
+				spacing: 5,
+				spacingHand: 15,
+
+				handHourLength: 60,
+				handMinuteLength: 80, 
+				handSecondLength: 90,
+
+				handHourColor: 0xFFFFFF,
+				handMinuteColor: 0xFFFFFF,
+				handSecondColor: 0xFF0000,
+			};
+
+
+			var light;
+			
+			var materials = {
+				handHour: new THREE.MeshPhongMaterial(
+					{
+						color: settings.handHourColor,
+						shininess: 10,
+						shading: THREE.FlatShading
+					}
+				),
+				handMinute: new THREE.MeshPhongMaterial(
+					{
+						color: settings.handMinuteColor,
+						shininess: 10,
+						shading: THREE.FlatShading
+					}
+				),
+				handSecond: new THREE.MeshPhongMaterial(
+					{
+						color: settings.handSecondColor,
+						shininess: 10,
+						shading: THREE.FlatShading
+					}
+				)
+			};
+
+			var boxGeometry3 = new THREE.BoxGeometry( settings.lineWidthHandHour, settings.handHourLength, 1);
+			var boxGeometry4 = new THREE.BoxGeometry( settings.lineWidthHandMinute, settings.handMinuteLength, 1);
+			var boxGeometry5 = new THREE.BoxGeometry( settings.lineWidthHandSecond, settings.handSecondLength, 1);
+
+			var handHourParent = new THREE.Object3D();
+			var handMinuteParent = new THREE.Object3D();
+			var handSecondParent = new THREE.Object3D();
+
+			var handHour = new THREE.Mesh( boxGeometry3, materials.handHour );
+			var handMinute = new THREE.Mesh( boxGeometry4, materials.handMinute );
+			var handSecond = new THREE.Mesh( boxGeometry5, materials.handSecond );
+
+
+			var timePassed = 0;
+
+
+			init();
+
+			animate();
+			testrender();
+			ply_animate();
+
+			function testrender(time) {
+				requestAnimationFrame( testrender );
+
+				if (time - timePassed > 1000) {
+					timePassed = time;
+
+					var date = new Date();
+
+					var hrs = date.getHours();
+					var min = date.getMinutes();
+					var sec = date.getSeconds();
+
+					var handHourR = (30 * (hrs > 12 ? hrs - 12 : hrs) * Math.PI) / 180;
+					var handMinuteR = (6 * min * Math.PI) / 180;
+					var handSecondR = (6 * sec * Math.PI) / 180;
+
+					handHourParent.rotation.z = -handHourR;
+					handMinuteParent.rotation.z = -handMinuteR;
+					handSecondParent.rotation.z = -handSecondR;
+
+				}
+
+				group.rotation.y += ( targetRotation - group.rotation.y ) * 0.05;
+
+				subgroup.rotateOnAxis(new THREE.Vector3(1, 0, 0), Math.PI / 180);
+
+				renderer.render( scene, camera );
+			}
+
+			function init() {
+				testgroup = new THREE.Group();
+				subgroup = new THREE.Group();
+				container = document.createElement( 'div' );
+				document.body.appendChild( container )
+
+
+				testgroup.position.x = 0;
+				testgroup.position.y = 0;
+
+				// testgroup.add(subgroup);
+				// scene.add( testgroup );
+				
+				handHourParent.add(handHour);
+				handMinuteParent.add(handMinute);
+				handSecondParent.add(handSecond);
+				handHour.translateOnAxis(new THREE.Vector3( 0, 1, 0 ), settings.handHourLength / 2 - settings.spacingHand );
+				handMinute.translateOnAxis(new THREE.Vector3( 0, 1, 0 ), settings.handMinuteLength / 2 - settings.spacingHand );
+				handSecond.translateOnAxis(new THREE.Vector3( 0, 1, 0 ), settings.handSecondLength / 2 - settings.spacingHand );
+
+				handHour.translateOnAxis(new THREE.Vector3( 0, 0, 1 ), settings.depthFace / 2 + 2 );
+				handMinute.translateOnAxis(new THREE.Vector3( 0, 0, 1 ), settings.depthFace / 2 + 3 );
+				handSecond.translateOnAxis(new THREE.Vector3( 0, 0, 1 ), settings.depthFace / 2 + 4 );
+
+				testgroup.add( handHourParent );
+				testgroup.add( handMinuteParent );
+				testgroup.add( handSecondParent );
+				console.log(testgroup);
+				
+				// CAMERA
+
+				camera = new THREE.PerspectiveCamera( 30, window.innerWidth / window.innerHeight, 1, 1500 );
+				camera.position.set( 0, 400, 700 );
+
+				cameraTarget = new THREE.Vector3( 0, 150, 0 );
+
+				// SCENE
+
+				scene = new THREE.Scene();
+				scene.background = new THREE.Color( 0x000000 );
+				scene.fog = new THREE.Fog( 0x000000, 250, 1400 );
+				testgroup.position.x = -5;
+				testgroup.position.y = 170;
+				scene.add( testgroup );
+
+				
+				// LIGHTS
+
+				const dirLight = new THREE.DirectionalLight( 0xffffff, 0.125 );
+				dirLight.position.set( 0, 0, 1 ).normalize();
+				scene.add( dirLight );
+
+				const pointLight = new THREE.PointLight( 0xffffff, 1.5 );
+				pointLight.position.set( 0, 100, 90 );
+				pointLight.color.setHSL( Math.random(), 1, 0.5 );
+				scene.add( pointLight );
+
+				material = new THREE.MeshPhongMaterial( { color: 0xffffff, flatShading: true } );
+
+				geometry = new THREE.BoxGeometry( 1, 1, 1 );
+				material = new THREE.MeshBasicMaterial( {color: 0xffffff} );
+
+				cubeA = new THREE.Mesh( geometry, material );
+				cubeA.position.set( 0, 0, 0 );
+
+
+				group = new THREE.Group();
+				group.position.x = 0;
+				group.position.y = 0;
+
+				group.add( cubeA );
+
+				
+
+				light = new THREE.DirectionalLight(0xFFFFFF, 0.9);
+				light.position.set(80, 80, 80);
+				scene.add(light);
+
+				clock_animation_group = new THREE.Group();
+				group.add(clock_animation_group);
+
+				ply_animate_group = new THREE.Group();
+				group.add(ply_animate_group);
+
+				scene.add( group );
+				//LOADER
+		
+				const loader = new THREE.TTFLoader();
+				
+				loader.load( "./HanyiSentyPagoda.ttf", function ( json ) {
+				console.log(json)
+					font = new THREE.Font( json );
+					createText();
+
+				} );
+
+				const plane = new THREE.Mesh(
+					new THREE.PlaneGeometry( 1000, 1000 ),
+					new THREE.MeshBasicMaterial( { color: 0xffffff, opacity: 0.5, transparent: true } )
+				);
+				plane.position.y = 100;
+				plane.rotation.x = - Math.PI / 2;
+				scene.add( plane );
+
+				// RENDERER
+
+				renderer = new THREE.WebGLRenderer( { antialias: true } );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				container.appendChild( renderer.domElement );
+
+
+				// EVENTS
+
+				container.style.touchAction = 'none';
+				container.addEventListener( 'pointerdown', onPointerDown );
+
+				document.addEventListener( 'keypress', onDocumentKeyPress );
+				document.addEventListener( 'keydown', onDocumentKeyDown );
+
+				window.addEventListener( 'resize', onWindowResize );
+
+				//PLY MODEL
+				ply_parent = new THREE.Object3D();
+				ply_loader = new PLYLoader();
+				ply_loader.load('./Mercedes-Benz CLK 430 Convertible.ply', function(geometry) 
+				{
+					geometry.computeVertexNormals();
+					const ply_material = new THREE.MeshStandardMaterial({
+						color: 0xffff00,
+						flatShading: true
+					})
+
+					const ply_mesh = new THREE.Mesh( geometry, ply_material);
+					ply_parent.add(ply_mesh);
+					ply_parent.position.set(-120,150,0);
+					ply_parent.scale.multiplyScalar(0.05);
+					ply_parent.castShadow =	true;
+					ply_parent.recieveShadow = true;
+
+					scene.add(ply_parent)
+				});
+
+			}
+
+			function onWindowResize() {
+
+				windowHalfX = window.innerWidth / 2;
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+			function onDocumentKeyDown( event ) {
+
+				if ( firstLetter ) {
+
+					firstLetter = false;
+					text = '';
+
+				}
+
+				const keyCode = event.keyCode;
+
+				// backspace
+
+				if ( keyCode === 8 ) {
+
+					event.preventDefault();
+
+					text = text.substring( 0, text.length - 1 );
+					refreshText();
+
+					return false;
+
+				}
+
+			}
+
+			function onDocumentKeyPress( event ) {
+
+				const keyCode = event.which;
+
+				// backspace
+
+				if ( keyCode === 8 ) {
+
+					event.preventDefault();
+
+				} else {
+
+					const ch = String.fromCharCode( keyCode );
+					text += ch;
+
+					refreshText();
+
+				}
+
+			}
+
+			function createText() {
+
+				
+				for( let i = 0; i < 12; i++ ){
+					angle = (i+3)*30;
+					r = 100
+					x = -r * Math.cos((angle/360)*2*3.14);
+					y = r * Math.sin((angle/360)*2*3.14)+100;
+
+					textGeo = new THREE.TextGeometry( text[i], {
+
+						font: font,
+
+						size: 20,
+						height: 5,
+						curveSegments: 2,
+							
+						bevelThickness: 0,
+						bevelSize: 0,
+						bevelEnabled: false
+
+					} );
+
+					textGeo.computeBoundingBox();
+					textGeo.computeVertexNormals();
+
+					const centerOffset = - 0.5 * ( textGeo.boundingBox.max.x - textGeo.boundingBox.min.x );
+
+					textMesh1 = new THREE.Mesh( textGeo, material );
+
+					textMesh1.position.set(x-20,y+50,0);
+
+					group.add( textMesh1 );
+
+					const circle = new THREE.Mesh(
+						new THREE.CircleGeometry( 20, 10000 ), 
+						new THREE.MeshBasicMaterial( { color: 0xabcd00 } ) 
+					);
+					
+					x = x + r /4 - 10;
+					y = y + r /4 - 15;
+					circle.position.set(x-20,y+50,0);
+					circleArray.push(circle);
+					group.add( circle );
+				}
+
+				const circle1 = new THREE.Mesh(
+						new THREE.CircleGeometry( 120, 10000 ), 
+						new THREE.MeshBasicMaterial( { color: 0x0000ff } ) 
+				);
+					
+				// x = x + r /4 - 10;
+				// y = y + r /4 - 15;
+				circle1.position.set(-5,160,0);
+
+				group.add( circle1 );
+
+				textGeo = new THREE.TextGeometry( text2, {
+
+					font: font,
+
+					size: size,
+					height: 2,
+					curveSegments: 0.5,
+						
+					bevelThickness: 0,
+					bevelSize: 0,
+					bevelEnabled: false
+
+				} );
+
+				textGeo.computeBoundingBox();
+				textGeo.computeVertexNormals();
+
+				const centerOffset = - 0.5 * ( textGeo.boundingBox.max.x - textGeo.boundingBox.min.x );
+
+				textMesh2 = new THREE.Mesh( textGeo, material );
+
+				textMesh2.position.set(-200,-50,0);
+				textMesh2.rotation.set(30,0,0);
+				group.add( textMesh2 );
+
+				
+
+			}
+
+			function refreshText() {
+
+				group.remove( textMesh1 );
+				if ( mirror ) group.remove( textMesh2 );
+
+				if ( ! text ) return;
+
+				createText();
+
+			}
+
+			function onPointerDown( event ) {
+
+				if ( event.isPrimary === false ) return;
+
+				pointerXOnPointerDown = event.clientX - windowHalfX;
+				targetRotationOnPointerDown = targetRotation;
+
+				document.addEventListener( 'click', onClickClock );
+				document.addEventListener( 'pointermove', onPointerMove );
+				document.addEventListener( 'pointerup', onPointerUp );
+
+			}
+
+			function onPointerMove( event ) {
+
+				if ( event.isPrimary === false ) return;
+
+				pointerX = event.clientX - windowHalfX;
+
+				targetRotation = targetRotationOnPointerDown + ( pointerX - pointerXOnPointerDown ) * 0.02;
+
+			}
+
+			function onPointerUp() {
+
+				if ( event.isPrimary === false ) return;
+
+				document.removeEventListener( 'pointermove', onPointerMove );
+				document.removeEventListener( 'pointerup', onPointerUp );
+
+			}
+
+			//
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				group.rotation.y += ( targetRotation - group.rotation.y ) * 0.05;
+
+				camera.lookAt( cameraTarget );
+
+				renderer.render( scene, camera );
+
+			}
+
+			function onClickClock(event) {
+
+				event.preventDefault();
+
+				const raycaster = new THREE.Raycaster();
+				const mouse = new THREE.Vector2();
+
+				mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+				mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+				raycaster.setFromCamera(mouse, camera);
+
+				let objects = circleArray;
+
+				var intersects = raycaster.intersectObjects(objects, true);
+
+
+				if (intersects.length > 0) {
+					window.open('https://ntut-cg-lab.github.io/cg2021f-hw00-Jim0415/');
+				}
+
+			}
+
+
+			function ply_animate(){
+				requestAnimationFrame( ply_animate );
+
+				const timer = Date.now() * 0.005 * 15;
+
+				ply_parent.position.x = -240;
+				ply_parent.position.y = 150;
+				ply_parent.position.z = 0;
+				ply_parent.rotation.x = -Math.PI / 180 * timer;
+				ply_parent.rotation.y = -Math.PI / 180 * timer;
+				ply_parent.rotation.z = -Math.PI / 180 * timer;
+				renderer.render( scene, camera );
+			}
+		</script>
+
+	</body>
+</html>
