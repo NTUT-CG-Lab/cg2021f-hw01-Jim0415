@@ -322,7 +322,7 @@
 				//PLY MODEL
 				ply_parent = new THREE.Object3D();
 				ply_loader = new PLYLoader();
-				ply_loader.load('./Mercedes-Benz CLK 430 Convertible.ply', function(geometry) 
+				ply_loader.load('./Crankshaft HD.ply', function(geometry) 
 				{
 					geometry.computeVertexNormals();
 					const ply_material = new THREE.MeshStandardMaterial({
@@ -333,7 +333,7 @@
 					const ply_mesh = new THREE.Mesh( geometry, ply_material);
 					ply_parent.add(ply_mesh);
 					ply_parent.position.set(-120,150,0);
-					ply_parent.scale.multiplyScalar(0.05);
+					ply_parent.scale.multiplyScalar(0.1);
 					ply_parent.castShadow =	true;
 					ply_parent.recieveShadow = true;
 
