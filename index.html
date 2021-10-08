@@ -556,13 +556,25 @@
 				raycaster.setFromCamera(mouse, camera);
 
 				let objects = circleArray;
+				for( let i = 0; i < 12; i++ )
+				{
+					var intersects = raycaster.intersectObject(objects[i], true);
 
-				var intersects = raycaster.intersectObjects(objects, true);
 
+					if (intersects.length > 0) {
+						if( i < 9 )
+						{
+							window.open('https://ntut-cg-lab.github.io/cg2021f-hw0'+ String(i+1) + '-Jim0415/');
+						}
+						else
+						{
+							window.open('https://ntut-cg-lab.github.io/cg2021f-hw'+ String(i+1) + '-Jim0415/');
+						}
 
-				if (intersects.length > 0) {
-					window.open('https://ntut-cg-lab.github.io/cg2021f-hw00-Jim0415/');
+					}
 				}
+
+
 
 			}
 
